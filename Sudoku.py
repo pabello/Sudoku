@@ -141,7 +141,7 @@ class SudokuWindow(QMainWindow):
 					self.fields[x].setStyleSheet("QPushButton { background-color: #ffff8c }")
 
 	def highlight_resonations(self):
-		if self.sender().text():
+		if self.sender().text() and self.current_choice != 0:
 			number = int(self.sender().text())
 		else:
 			number = self.current_choice
@@ -171,10 +171,14 @@ class SudokuWindow(QMainWindow):
 				if not self.missing_values_amount:
 					self.check_for_win()
 			else:
-				ids = [i for i in self.current_area if self.fields[i].text() == str(self.current_choice)]
-				for index in ids:
-					self.fields[index].setStyleSheet("QPushButton { background-color: #73c7ff; border: 3px solid red; border-radius: 3px; }")
+				if self.current_choice != 0:
+					ids = [i for i in self.current_area if self.fields[i].text() == str(self.current_choice)]
+					for index in ids:
+						self.fields[index].setStyleSheet("QPushButton { background-color: #73c7ff; border: 3px solid red; border-radius: 3px; }")
 		else:
+			number = int(self.sender().text())
+			self.filled_digits[number] -= 1
+			self.update_missing_digits()
 			self.sender().setText('')
 
 	def check_for_win(self):
@@ -212,11 +216,7 @@ class SudokuWindow(QMainWindow):
 		for btn in self.choice_buttons:
 			btn.setStyleSheet("QPushButton {  }")
 		self.sender().setStyleSheet("QPushButton { border: 2px solid #4476ff; border-radius: 5px; }")
-		# for x in range(len(self.fields)):
-		# 	if x in self.unsolved_cast:
-		# 		self.fields[x].setStyleSheet("QPushButton { background-color: #b2b2b2 }")
-		# 	else:
-		# 		self.fields[x].setStyleSheet("QPushButton { background-color: white }")
+		self.highlight_number(0)
 
 	def note(self):
 		self.note_mode = False if self.note_mode else True
