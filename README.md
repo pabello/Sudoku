@@ -4,7 +4,8 @@ To be done...
 
 
 #### Todo list:
-- [ ] fully implement infering
+- [x] fully implement infering
+- [x] check if grids always have only 1 solution
 - [ ] implement undo
 - [ ] implement notes
 - [ ] add a timer
