@@ -178,8 +178,10 @@ class SudokuWindow(QMainWindow):
 		else:
 			number = int(self.sender().text())
 			self.filled_digits[number] -= 1
+			self.missing_values_amount += 1
 			self.update_missing_digits()
 			self.sender().setText('')
+		print(self.missing_values_amount)
 
 	def check_for_win(self):
 		success = True
@@ -292,9 +294,7 @@ class Sudoku:
 		return False
 
 	def solve_grid(self, field=0):
-		# print('entering field', field, self.grid[field])
 		if self.grid[field] == 0:
-			# print('value:', self.grid[field])
 			row = self.grid[field-field%9 : field//9*9+9]
 			col = [self.grid[x*9+field%9] for x in range(9)]
 			trow = field//27  # thick_row - block of rows
@@ -325,52 +325,62 @@ class Sudoku:
 		else:
 			return self.solve_grid(field+1)
 
-	def remove_values(self, difficulty='medium'):
+	def prepare_grid(self, difficulty='medium'):
+		ready = False
+		attempt = 1
+		while not ready:
+			base_grid = [x for x in self.grid]
+			print('attempt: ', attempt)
+			ready = self.remove_values(difficulty)
+			if not ready:
+				self.grid = [x for x in base_grid]
+				attempt += 1
+
+	def remove_values(self, difficulty):
 		quantities = {1:9, 2:9, 3:9, 4:9, 5:9, 6:9, 7:9, 8:9, 9:9}
 		emptied = False
 		if difficulty == 'easy':
 			goal = 40
 		if difficulty == 'medium':
-			# goal = 34
-			# goal = 60
-			goal = 45
+			goal = 34
 		if difficulty == 'hard':
 			goal = 28
 		removed = []
 
+		fail_count = 0
 		base_grid = deepcopy(self.grid)
+
 		while len(removed) < 81-goal:
-			# self.print_solo_grid()
 			rm1 = choice([x for x in range(81) if x not in removed])
 			rm2 = 80 - rm1
 			num1 = self.grid[rm1]
 			num2 = self.grid[rm2]
 
-			# print('{}:{}  {}:{}   {}'.format(rm1, num1, rm2, num2, '=' if num1==num2 else '!='))
-
 			if rm1 == rm2:
 				if quantities[num1] > 1:
 					self.grid[rm1] = 0
-					if self.human_solve(base_grid):
+					if self.single_solution_check(base_grid):
 						removed.append(rm1)
 						quantities[num1] -= 1
 					else:
 						self.grid[rm1] = num1
+						fail_count += 1
 				elif not emptied:
 					self.grid[rm1] = 0
-					if self.human_solve(base_grid):
+					if self.single_solution_check(base_grid):
 						removed.append(rm1)
 						quantities[num1] -= 1
 						emptied = True
 					else:
 						self.grid[rm1] = num1
+						fail_count += 1
 				# continue
 			else:  
 				if num1 != num2:
 					if quantities[num1] > 1 and quantities[num2] > 1:
 						self.grid[rm1] = 0
 						self.grid[rm2] = 0
-						if self.human_solve(base_grid):
+						if self.single_solution_check(base_grid):
 							removed.append(rm1)
 							removed.append(rm2)
 							quantities[num1] -= 1
@@ -378,10 +388,11 @@ class Sudoku:
 						else:
 							self.grid[rm1] = num1
 							self.grid[rm2] = num2
+							fail_count += 1
 					elif not emptied and quantities[num1] != quantities[num2]:
 						self.grid[rm1] = 0
 						self.grid[rm2] = 0
-						if self.human_solve(base_grid):
+						if self.single_solution_check(base_grid):
 							removed.append(rm1)
 							removed.append(rm2)
 							quantities[num1] -= 1
@@ -390,22 +401,24 @@ class Sudoku:
 						else:
 							self.grid[rm1] = num1
 							self.grid[rm2] = num2
+							fail_count += 1
 					# continue
 				else:
 					if quantities[num1] > 2:
 						self.grid[rm1] = 0
 						self.grid[rm2] = 0
-						if self.human_solve(base_grid):
+						if self.single_solution_check(base_grid):
 							removed.append(rm1)
 							removed.append(rm2)
 							quantities[num1] -= 2
 						else:
 							self.grid[rm1] = num1
 							self.grid[rm2] = num1
+							fail_count += 1
 					elif not emptied and quantities[num1] == 2:
 						self.grid[rm1] = 0
 						self.grid[rm2] = 0
-						if self.human_solve(base_grid):
+						if self.single_solution_check(base_grid):
 							removed.append(rm1)
 							removed.append(rm2)
 							quantities[num1] -= 2
@@ -413,10 +426,29 @@ class Sudoku:
 						else:
 							self.grid[rm1] = num1
 							self.grid[rm2] = num1
+							fail_count += 1
 					# continue
+			if fail_count >= 10:
+				return False
 
 		self.player_grid = self.grid
 		self.grid = base_grid
+		return True
+
+	def single_solution_check(self, solved_grid):
+		for i in range(5):
+			if not self.human_solve(solved_grid):
+				return False
+
+		grid = [x for x in self.grid]
+
+		for i in range(3):
+			single_solution = self.solve_grid()
+			self.grid = [x for x in grid]
+			if not single_solution:
+				return False
+
+		return True
 
 	def human_solve(self, solved_grid):
 		grid = [x for x in self.grid]
@@ -515,8 +547,8 @@ class Sudoku:
 			options_ref = deepcopy(options)
 
 			# infering in every box
-			# for box in box_ids:
-			# 	self.infer_in_box(options, box_ids, box)
+			for box in box_ids:
+				self.infer_in_box(options, box_ids, box)
 
 			for field in options.keys():
 				if not len(options[field]):
@@ -538,7 +570,6 @@ class Sudoku:
 
 				if len(options[field]) == 1:
 					grid[field] = options[field][0]
-					change = True
 
 					# removing the option from related fields
 					for related in field_relations[field]:
@@ -556,7 +587,6 @@ class Sudoku:
 					pass
 
 			if options == options_ref:  # this is smart enough to compare structures like list
-				print('brak zmian')
 				return False
 
 		for index in range(81):
@@ -571,8 +601,6 @@ class Sudoku:
 	def infer_in_box(self, options, box_ids, box):
 		for num in range(1,9+1):
 			occurs = [index for index in box if (index in options.keys() and num in options[index])]
-			# debug
-			# print('infering now')
 
 			if len(occurs) > 1:
 				aligned_col = True
@@ -582,7 +610,7 @@ class Sudoku:
 				for field in occurs[1:]:
 					if [x*9+field%9 for x in range(9)] != base_col:
 						aligned_col = False
-					if range(occurs[0]-occurs[0]%9, occurs[0]//9*9+9) != base_row:
+					if range(field-field%9, field//9*9+9) != base_row:
 						aligned_row = False
 
 				if aligned_col:
@@ -604,7 +632,6 @@ class Sudoku:
 								options[field].remove(num)
 							except (KeyError, ValueError):
 								pass
-
 
 	def print_solo_grid(self, select='solved'):
 		if select == 'solved':
@@ -638,7 +665,7 @@ if __name__ == '__main__':
 	
 	sudoku = Sudoku()
 	sudoku.generate_grid()
-	sudoku.remove_values()
+	sudoku.prepare_grid()
 
 	window = SudokuWindow()
 	window.get_grids(sudoku.get_grids())
