@@ -1,0 +1,7 @@
+- [x] gumka wyłącza wyszarzanie przycisków z cyferkami
+- [x] wpisanie cyferki wyłącza podświetlenie numerka na dole
+- [x] undo po wymazywaniu nie zmniejsza liczby brakujacych cyfr
+- [x] wpisanie wszędzie danej cyferki źle wyszarza przycisk jeśli jest podświetlony
+- [x] podpowiedzi dodać do starterów / zablokować usuwanie i wyróżnić
+- [ ] podpowiedź z całą wypełnioną planszą wywala grę
+- [ ] podświetlać wpisy z hintów jeśli wpadnie aktualnie wybrana liczba

@@ -17,21 +17,50 @@ from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QIcon, QPainter, QPen
 
-class SudokuWindow(QMainWindow):
 
-	def __init__(self):
+class SudokuWindow(QMainWindow):
+	BLANK_STYLE = "QPushButton {  }"
+	BLACK_BG = "QLabel { background-color: black }"
+	BLUE_BORDER = "QPushButton { border: 2px solid #4476ff; border-radius: 5px; }"
+	BLUE_TEXT = "QPushButton { color: #1B37FF; }"
+	BOTTOM_BAR_PICTURE = 'QLabel { background: url("images/wp3.jpg") }'
+	COLLIDER = "QPushButton { background-color: #73c7ff; border: 3px solid red; border-radius: 3px; }"
+	CURRENT_ACTIVE_CHOICE_BUTTON = "QPushButton { border: 2px solid #4476ff; border-radius: 5px; }"
+	CURRENT_INACTIVE_CHOICE_BUTTON = "QPushButton { background-color: #bbbbbb; }"
+	FOOTER_BAR = "QLabel { background-color: #2f2f2f; color: #ebebeb; text-align: center; font-size: 13px; }"
+	GREEN_BORDER_BLUE_TEXT = "QPushButton { color: #1B37FF; border: 2px solid #85ff42 }"
+	HIGHLIGHT_STARTERS = "QPushButton { background-color: #8CB164 }"
+	HIGHLIGHT_CHOICES = "QPushButton { background-color: #D8FF9C }"
+	HINTS_DEFAULT = "QPushButton { color: #1B37FF; }"
+	LIMITING_FIELDS = "QPushButton { background-color: #73c7ff }"
+	LIMITING_HINTS = "QPushButton { color: #1B37FF; background-color: #73c7ff }"
+	OTHER_ACTIVE_CHOICE_BUTTON = BLANK_STYLE
+	OTHER_INACTIVE_CHOICE_BUTTON = "QPushButton { background-color: #cccccc; }"
+	PREDEFINED_GAME_TILE = "QPushButton { background-color: #b2b2b2 }"
+	STARTERS_DEFAULT = "QPushButton { background-color: #b2b2b2 }"
+	TOP_BAR_BG = "QLabel { background-color: #e5e5e5 }"
+	TOP_BAR_BUTTONS = "QPushButton { background-color: #a1a1a1; font-size: 18px; font-weight: bold; }"
+	WHITE_BG = "QPushButton { background-color: white }"
+
+	def __init__(self, width=450, height=600, screen_size=(1366, 768)):
 		super().__init__()
+		self.width = width
+		self.height = height
+		self.screen_size = screen_size
 		self.setWindowTitle('Sudoku Go!')
-		self.current_choice = 0
+
+		self.current_number = 0
 		self.fields = []
 		self.choice_buttons = []
 		self.note_mode = False
-		
+		self.backlog = []  # User action history [(field_id, field, value_before, value_after)]
+
 		self.solved = None
 		self.unsolved = None
 		self.unsolved_cast = None
 		self.missing_values_amount = None
-		self.filled_digits = {x:0 for x in range(1,9+1)}
+		self.filled_digits = {x: 0 for x in range(1, 9+1)}
+		self.hint_filled_ids = []
 
 		self.current_field_id = None
 		self.current_row = None
@@ -49,17 +78,17 @@ class SudokuWindow(QMainWindow):
 			self.filled_digits[self.unsolved[i]] += 1
 		self.missing_values_amount = 81 - len(self.unsolved_cast)
 
-	def set_window_size(self, width=450, height=600, screen_size=[1366, 768]):
-		self.setGeometry( (screen_size[0]-width)/2, (screen_size[1]-height)/2, width, height )
+	def set_window_size(self):
+		width_factor = int((self.screen_size[0] - self.width) / 2)
+		height_factor = int((self.screen_size[1]-self.height)/2)
+		self.setGeometry(width_factor, height_factor, self.width, self.height)
 		self.setWindowIcon(QIcon('images/icon.png'))
-		self.width = width
-		self.height = height
 
 	def generate_view(self, grid=None):
 		# set menu bar
 		menu_bar = QtWidgets.QLabel(self)
 		menu_bar.setGeometry(0, 0, self.width, 60)
-		menu_bar.setStyleSheet("QLabel { background-color: #e5e5e5 }")
+		menu_bar.setStyleSheet(self.TOP_BAR_BG)
 
 		menu_button_width = 150
 		menu_button_height = 40
@@ -68,58 +97,59 @@ class SudokuWindow(QMainWindow):
 		hint_button = QtWidgets.QPushButton('Hint', menu_bar)
 		hint_button.setToolTip('Reveal one number')
 		hint_button.resize(menu_button_width, menu_button_height)
-		hint_button.move(margin, margin)
+		hint_button.move(int(margin), int(margin))
 		hint_button.clicked.connect(self.get_hint)
 
 		# undo button
 		undo_button = QtWidgets.QPushButton('Undo', menu_bar)
 		undo_button.setToolTip('Undo your previous move')
 		undo_button.resize(menu_button_width, menu_button_height)
-		undo_button.move(self.width-menu_button_width-margin, margin)
-		self.setStyleSheet("QPushButton { background-color: #a1a1a1; font-size: 18px; font-weight: bold; }")
+		undo_button.move(int(self.width-menu_button_width-margin), int(margin))
+		undo_button.clicked.connect(self.undo_move)
+		self.setStyleSheet(self.TOP_BAR_BUTTONS)
 
 		# game grid
-		field_size = (self.width)/9
+		field_size = self.width/9
 		grid = QtWidgets.QLabel(self)
 		grid.setGeometry(0, menu_bar.height(), 450, 450)
-		grid.setStyleSheet("QPushButton { background-color: white }")
+		grid.setStyleSheet(self.WHITE_BG)
 
 		for i in range(81):
 			field = QtWidgets.QPushButton(str(self.unsolved[i]) if self.unsolved[i] != 0 else '', grid)
-			field.setGeometry( (i%9*field_size), (i//9*field_size), field_size, field_size )
+			field.setGeometry(int((i % 9*field_size)), int((i//9*field_size)), int(field_size), int(field_size))
 			field.clicked.connect(self.update_current_area)
 			field.clicked.connect(self.highlight_resonations)
 			if i in self.unsolved_cast:
-				field.setStyleSheet("QPushButton { background-color: #b2b2b2 }")
-				# field.clicked.connect(self.highlight_resonations)
+				field.setStyleSheet(self.PREDEFINED_GAME_TILE)
 			else:
 				field.clicked.connect(self.field_click)
-				# field.clicked.connect(self.highlight_restrictions)
 			self.fields.append(field)
 
 		line_thickness = 2
 		for x in range(2):
 			v_bar = QtWidgets.QLabel(grid)
-			v_bar.setGeometry(x*grid.width()/3+3*field_size-line_thickness/2, 0, line_thickness, grid.height())
-			v_bar.setStyleSheet("QLabel { background-color: black }")
+			v_bar.setGeometry(int(x*grid.width()/3+3*field_size-line_thickness/2), 0, line_thickness, grid.height())
+			v_bar.setStyleSheet(self.BLACK_BG)
 			h_bar = QtWidgets.QLabel(grid)
-			h_bar.setGeometry(0, x*grid.height()/3+3*field_size-line_thickness/2, grid.width(), line_thickness)
-			h_bar.setStyleSheet("QLabel { background-color: black }")
+			h_bar.setGeometry(0, int(x*grid.height()/3+3*field_size-line_thickness/2), grid.width(), line_thickness)
+			h_bar.setStyleSheet(self.BLACK_BG)
 
 		# number choice bar
 		num_bar = QtWidgets.QLabel(window)
 		num_bar.setGeometry(0, menu_bar.height()+grid.height(), self.width, 70)
-		num_bar.setStyleSheet('QLabel { background: url("images/wp3.jpg") }')
+		num_bar.setStyleSheet(self.BOTTOM_BAR_PICTURE)
 		choice_button_size = num_bar.width() // 11
 		for i in range(1, 1+11):
 			choice_button = QtWidgets.QPushButton(str(i) if i < 10 else '', num_bar)
-			choice_button.setGeometry((i-1)*choice_button_size+(self.width%12)-1, (num_bar.height()-choice_button_size)/2, choice_button_size-1, choice_button_size)
+			choice_button_h_offset = (i-1)*choice_button_size+(self.width % 12)-1
+			choice_button_v_offset = int((num_bar.height()-choice_button_size)/2)
+			choice_button.setGeometry(choice_button_h_offset, choice_button_v_offset, choice_button_size-1, choice_button_size)
 			if i <= 9:
-				choice_button.clicked.connect(self.update_current_choice)
+				choice_button.clicked.connect(self.update_current_number)
 			elif i == 10:
 				choice_button.clicked.connect(self.rubber)
 				choice_button.setIcon(QIcon('images/rubber.png'))
-				choice_button.setIconSize(QSize(.8*choice_button_size, .8*choice_button_size))
+				choice_button.setIconSize(QSize(int(.8*choice_button_size), int(.8*choice_button_size)))
 			else:
 				choice_button.clicked.connect(self.note)
 			self.choice_buttons.append(choice_button)
@@ -128,60 +158,87 @@ class SudokuWindow(QMainWindow):
 		# footer
 		footer = QtWidgets.QLabel(window)
 		footer.setGeometry(0, menu_bar.height()+grid.height()+num_bar.height(), self.width, 20)
-		footer.setStyleSheet("QLabel { background-color: #2f2f2f; color: #ebebeb; text-align: center; font-size: 13px; }")
+		footer.setStyleSheet(self.FOOTER_BAR)
 		footer.setText("Sudoku by Paweł Wacławiak ©")
 		footer.setAlignment(Qt.AlignCenter)
 
-	def highlight_restrictions(self, bool, blue_highlighted=None):
-		for x in self.current_area:
-			if self.fields[x].text() != blue_highlighted:
-				if x in self.unsolved_cast:
-					self.fields[x].setStyleSheet("QPushButton { background-color: #a1a162 }")
-				else:
-					self.fields[x].setStyleSheet("QPushButton { background-color: #ffff8c }")
+	def highlight_restrictions(self, blue_highlighted=None):
+		try:
+			for x in self.current_area:
+				if self.fields[x].text() != blue_highlighted:
+					if x in self.unsolved_cast:
+						self.fields[x].setStyleSheet(self.HIGHLIGHT_STARTERS)
+					else:
+						self.fields[x].setStyleSheet(self.HIGHLIGHT_CHOICES)
+		except TypeError:
+			pass
 
 	def highlight_resonations(self):
-		if self.sender().text() and self.current_choice != 0:
-			number = int(self.sender().text())
-		else:
-			number = self.current_choice
+		try:
+			number = self.current_number
+		except ValueError:
+			pass
 		self.highlight_number(number)
-		self.highlight_restrictions(False, blue_highlighted=str(number))
+		self.highlight_restrictions(str(number))
 
 	def highlight_number(self, number):
+		number = str(number)
+		print('number: {}   curr_num: {}'.format(number, self.current_number))
 		for x in range(len(self.fields)):
-			if self.fields[x].text() == str(number):
-				self.fields[x].setStyleSheet("QPushButton { background-color: #73c7ff }")
+			if self.fields[x].text() == number:
+				if x in self.hint_filled_ids:
+					self.fields[x].setStyleSheet(self.LIMITING_HINTS)
+				else:
+					self.fields[x].setStyleSheet(self.LIMITING_FIELDS)
 			else:
 				if x in self.unsolved_cast:
-					self.fields[x].setStyleSheet("QPushButton { background-color: #b2b2b2 }")
+					self.fields[x].setStyleSheet(self.STARTERS_DEFAULT)
 				else:
-					self.fields[x].setStyleSheet("QPushButton { background-color: white }")
+					if x in self.hint_filled_ids:
+						self.fields[x].setStyleSheet(self.HINTS_DEFAULT)
+					else:
+						self.fields[x].setStyleSheet(self.WHITE_BG)
 
 	def field_click(self):
-		if self.current_choice:
-			restricted = set([int(self.fields[num].text()) for num in self.current_area if self.fields[num].text()])
-			if self.current_choice not in restricted:
-				self.sender().setText(str(self.current_choice))
-				self.sender().setStyleSheet("QPushButton { background-color: #73c7ff }")
-				self.unsolved[self.current_field_id] = self.current_choice
-				self.filled_digits[self.current_choice] += 1
-				self.update_missing_digits()
-				self.missing_values_amount -= 1
-				if not self.missing_values_amount:
-					self.check_for_win()
-			else:
-				if self.current_choice != 0:
-					ids = [i for i in self.current_area if self.fields[i].text() == str(self.current_choice)]
-					for index in ids:
-						self.fields[index].setStyleSheet("QPushButton { background-color: #73c7ff; border: 3px solid red; border-radius: 3px; }")
-		else:
-			number = int(self.sender().text())
-			self.filled_digits[number] -= 1
-			self.missing_values_amount += 1
-			self.update_missing_digits()
-			self.sender().setText('')
+		if self.current_number:
+			previous_number = self.unsolved[self.current_field_id]
+			if self.current_number != previous_number:
+				restricted = set([int(self.fields[num].text()) for num in self.current_area if self.fields[num].text()])
+				if self.current_number not in restricted:
+					self.add_to_history(self.current_field_id, self.sender(), previous_number, self.current_number)
+					if self.unsolved[self.current_field_id] != 0:  # If the field was not empty do not decrease the counter
+						self.filled_digits[previous_number] -= 1  # Decrease the previous number count
+					else:
+						self.missing_values_amount -= 1
+					self.sender().setText(str(self.current_number))
+					self.unsolved[self.current_field_id] = self.current_number
+					self.filled_digits[self.current_number] += 1
+					self.sender().setStyleSheet(self.BLUE_BORDER)
+					self.choice_buttons[self.current_number-1].setStyleSheet(self.CURRENT_ACTIVE_CHOICE_BUTTON)
+					if not self.missing_values_amount:
+						self.check_for_win()
+				else:  # Highlighting colliding numbers with red border
+					if self.current_number != 0:
+						ids = [i for i in self.current_area if self.fields[i].text() == str(self.current_number)]
+						for index in ids:
+							self.fields[index].setStyleSheet(self.COLLIDER)
+		else:  # Erasing with a rubber
+			try:
+				number = int(self.sender().text())
+				self.add_to_history(self.current_field_id, self.sender(), self.unsolved[self.current_field_id], self.current_number)
+				self.filled_digits[number] -= 1
+				self.missing_values_amount += 1
+				self.unsolved[self.current_field_id] = self.current_number
+				self.sender().setText('')
+			except ValueError:
+				pass
+		self.update_missing_digits()
 		print(self.missing_values_amount)
+
+	def add_to_history(self, field_id, field, before, after):
+		if before != after:
+			self.backlog.append((field_id, field, before, after))
+			print(self.backlog[-1])
 
 	def check_for_win(self):
 		success = True
@@ -192,32 +249,40 @@ class SudokuWindow(QMainWindow):
 			print('You won!\n')
 
 	def update_missing_digits(self):
-		for digit in range(1,9+1):
+		for digit in range(1, 9+1):
 			if self.filled_digits[digit] == 9:
-				self.choice_buttons[digit-1].setEnabled(False)
-				self.choice_buttons[digit-1].setStyleSheet("QPushButton {background-color: #cccccc}")
+				self.choice_buttons[digit - 1].setEnabled(False)
+				if digit == self.current_number:
+					self.choice_buttons[digit-1].setStyleSheet(self.CURRENT_INACTIVE_CHOICE_BUTTON)
+				else:
+					self.choice_buttons[digit-1].setStyleSheet(self.OTHER_INACTIVE_CHOICE_BUTTON)
+
 			else:
 				self.choice_buttons[digit-1].setEnabled(True)
-				self.choice_buttons[digit-1].setStyleSheet("QPushButton {  }")
+				if digit == self.current_number:
+					self.choice_buttons[digit-1].setStyleSheet(self.CURRENT_ACTIVE_CHOICE_BUTTON)
+				else:
+					self.choice_buttons[digit-1].setStyleSheet(self.BLANK_STYLE)
 
-	def update_current_choice(self):
-		text = self.sender().text()
-		self.update_missing_digits()
-		for i in range(9, len(self.choice_buttons)):
-			self.choice_buttons[i].setStyleSheet("QPushButton {  }")
-		self.sender().setStyleSheet("QPushButton { border: 2px solid #4476ff; border-radius: 5px; }")
+	def update_current_number(self):
+		"""
+		Updates the currently chosen number to be filled into cells
+		:return:
+		"""
 		try:
-			number = int(text)
-			self.current_choice = number
-			self.highlight_number(number)
+			number = int(self.sender().text())
+			self.current_number = number
 		except ValueError:
 			pass
+		finally:
+			self.highlight_number(self.current_number)
+			self.update_missing_digits()
+			self.choice_buttons[9].setStyleSheet(self.BLANK_STYLE)
 
 	def rubber(self):
-		self.current_choice = 0
-		for btn in self.choice_buttons:
-			btn.setStyleSheet("QPushButton {  }")
-		self.sender().setStyleSheet("QPushButton { border: 2px solid #4476ff; border-radius: 5px; }")
+		self.current_number = 0
+		self.update_current_number()
+		self.sender().setStyleSheet(self.BLUE_BORDER)
 		self.highlight_number(0)
 
 	def note(self):
@@ -232,16 +297,46 @@ class SudokuWindow(QMainWindow):
 		self.missing_values_amount -= 1
 		self.filled_digits[self.solved[chosen_id]] += 1
 		self.fields[chosen_id].setText(str(self.solved[chosen_id]))
-		self.fields[chosen_id].setStyleSheet("QPushButton { border: 2px solid #85ff42 }")
+		self.fields[chosen_id].setStyleSheet(self.GREEN_BORDER_BLUE_TEXT)
+		self.hint_filled_ids.append(chosen_id)
 		self.update_missing_digits()
 		self.check_for_win()
+
+	def undo_move(self):
+		try:
+			move = self.backlog.pop()
+
+			print(move)
+			print('backlog length = {}'.format(len(self.backlog)))
+
+			(field_id, field, value_before, value_after) = move
+			self.unsolved[field_id] = value_before
+			field.setText(str(value_before or ''))
+			try:
+				self.filled_digits[value_before] += 1
+				self.filled_digits[value_after] -= 1
+			except KeyError:
+				pass
+			if value_before != 0 and value_after == 0:
+				self.missing_values_amount -= 1
+			if value_before == 0 and value_after != 0:
+				self.missing_values_amount += 1
+
+			# TODO un-highlight cell after undo
+				# self.current_field_id = None
+		except IndexError:
+			pass
+		finally:
+			self.update_missing_digits()
+			self.highlight_resonations()
+			print(self.missing_values_amount)
 
 	def update_current_area(self):
 		field_id = [x for x in range(81) if self.fields[x] == self.sender()].pop()
 		self.current_field_id = field_id
-		self.current_row = [x for x in range(field_id-field_id%9, field_id//9*9+9)]
-		self.current_col = [x*9+field_id%9 for x in range(9)]
-		self.current_box = [range(81)[field_id//27*27 + field_id%9//3*3 + x + y*9] for y in range(3) for x in range(3)]
+		self.current_row = [x for x in range(field_id-field_id % 9, field_id//9*9+9)]
+		self.current_col = [x*9+field_id % 9 for x in range(9)]
+		self.current_box = [range(81)[field_id//27*27 + field_id % 9//3*3 + x + y*9] for y in range(3) for x in range(3)]
 		self.current_area = set(self.current_row + self.current_col + self.current_box)
 
 	def show_window(self):
@@ -252,7 +347,7 @@ class SudokuWindow(QMainWindow):
 class Sudoku:
 
 	def __init__(self, difficulty='easy'):
-		self.grid = [0 for x in range(81)]
+		self.grid = [0 for _ in range(81)]
 		self.player_grid = []
 		# self.player_grid = remove_values(difficulty)
 
@@ -262,24 +357,30 @@ class Sudoku:
 		pass
 
 	def get_grids(self):
-		return (self.grid, self.player_grid)
+		return self.grid, self.player_grid
 
 	def generate_grid(self):
 		self._guess_field_value()
 		return self.grid
 
-	def _guess_field_value(self, field=0):
-		# figure out the limitating cells
-		row = self.grid[field-field%9 : field//9*9+9]
-		col = [self.grid[x*9+field%9] for x in range(9)]
+	def _get_possible_inputs(self, field):
+		"""
+		Returns IDs of the cells that react with the one of ID given in terms of possible inputs to the cell.
+		:param field: ID of a cell to figure out the other cells limiting its input.
+		:return: Possible inputs to the specified cell.
+		"""
+		row = self.grid[field-field % 9: field//9*9+9]
+		col = [self.grid[x*9+field % 9] for x in range(9)]
 		trow = field//27  # thick_row - block of rows
-		tcol = field%9//3  # thick_col - block of collumns
+		tcol = field % 9//3  # thick_col - block of columns
 		box = [self.grid[trow*27+tcol*3+x+y*9] for y in range(3) for x in range(3)]
 
-		# limit possible inputs
-		possibilities = [x for x in range(0+1,9+1) if x not in row and x not in col and x not in box]
+		possibilities = [x for x in range(0+1, 9+1) if x not in row and x not in col and x not in box]
 		shuffle(possibilities)
+		return possibilities
 
+	def _guess_field_value(self, field=0):
+		possibilities = self._get_possible_inputs(field)
 		for current_choice in possibilities:
 			self.grid[field] = current_choice
 
@@ -295,15 +396,7 @@ class Sudoku:
 
 	def solve_grid(self, field=0):
 		if self.grid[field] == 0:
-			row = self.grid[field-field%9 : field//9*9+9]
-			col = [self.grid[x*9+field%9] for x in range(9)]
-			trow = field//27  # thick_row - block of rows
-			tcol = field%9//3  # thick_col - block of collumns
-			box = [self.grid[trow*27+tcol*3+x+y*9] for y in range(3) for x in range(3)]
-
-			possibilities = [x for x in range(0+1,9+1) if x not in row and x not in col and x not in box]
-			shuffle(possibilities)
-
+			possibilities = self._get_possible_inputs(field)
 			# print(possibilities)
 			for current_choice in possibilities:
 				self.grid[field] = current_choice
@@ -316,7 +409,7 @@ class Sudoku:
 					self.grid[field] = 0
 					return True
 
-			# backtrace
+			# BACKTRACE
 			self.grid[field] = 0
 			return False
 
@@ -325,7 +418,7 @@ class Sudoku:
 		else:
 			return self.solve_grid(field+1)
 
-	def prepare_grid(self, difficulty='medium'):
+	def prepare_grid(self, difficulty='easy'):
 		ready = False
 		attempt = 1
 		while not ready:
@@ -336,9 +429,10 @@ class Sudoku:
 				self.grid = [x for x in base_grid]
 				attempt += 1
 
-	def remove_values(self, difficulty):
-		quantities = {1:9, 2:9, 3:9, 4:9, 5:9, 6:9, 7:9, 8:9, 9:9}
+	def remove_values(self, difficulty='easy'):
+		quantities = {1: 9, 2: 9, 3: 9, 4: 9, 5: 9, 6: 9, 7: 9, 8: 9, 9: 9}
 		emptied = False
+		goal = 0
 		if difficulty == 'easy':
 			goal = 40
 		if difficulty == 'medium':
@@ -375,7 +469,7 @@ class Sudoku:
 						self.grid[rm1] = num1
 						fail_count += 1
 				# continue
-			else:  
+			else:
 				if num1 != num2:
 					if quantities[num1] > 1 and quantities[num2] > 1:
 						self.grid[rm1] = 0
@@ -457,8 +551,8 @@ class Sudoku:
 		# 	row = grid[x-x%9 : x//9*9+9]
 		# 	col = [grid[x*9+x%9] for x in range(9)]
 		# 	box = [grid[x//27*27+x%9//3*3+a+b*9] for b in range(3) for a in range(3)]
-		# 	forbiden_digits = set(grid[i] for i in row+col+box)
-		# 	options[x] = [n for n in range(1, 9+1) if n not in forbiden_digits]
+		# 	forbidden_digits = set(grid[i] for i in row+col+box)
+		# 	options[x] = [n for n in range(1, 9+1) if n not in forbidden_digits]
 		# 	if not options[x]:
 		# 		return False
 
@@ -476,12 +570,11 @@ class Sudoku:
 
 
 
-		# row = self.grid[field-field%9 : field//9*9+9]
+		# row = self.grid[field-field % 9 : field//9*9+9]
 		# col = [self.grid[x*9+field%9] for x in range(9)]
 		# trow = field//27  # thick_row - block of rows
 		# tcol = field%9//3  # thick_col - block of collumns
 		# box = [self.grid[trow*27+tcol*3+x+y*9] for y in range(3) for x in range(3)]
-
 
 		# prints with color
 		# for x in range(9):
@@ -495,16 +588,16 @@ class Sudoku:
 		# 	print(buffer)
 
 		# initializes options with 1-9 digits for fields that contain 0
-		options = {x:list(range(1, 9+1)) for x in range(81) if not grid[x]}
+		options = {x: list(range(1, 9+1)) for x in range(81) if not grid[x]}
 		field_relations = {}
 		solved_fields = []
 		# for every empty field (containing 0)
 		for field in options:
 			# calculating related indexes
-			row = list(range(field-field%9, field//9*9+9))
-			col = [x*9+field%9 for x in range(9)]
-			box = [field//27*27+field%9//3*3+a+b*9 for b in range(3) for a in range(3)]
-			related_indexes = list( set(row + col + box) )
+			row = list(range(field-field % 9, field//9*9+9))
+			col = [x*9+field % 9 for x in range(9)]
+			box = [field//27*27+field % 9//3*3+a+b*9 for b in range(3) for a in range(3)]
+			related_indexes = list(set(row + col + box))
 
 			# debug
 			# for x in range(9):
@@ -539,20 +632,20 @@ class Sudoku:
 		# 			buffer += str(num) + ' '
 		# 	print(buffer)
 		# print()
-		
+
 		# list of boxes (lists) containing field ids
-		box_ids = [[(27*ver+3*hor)//27*27+(27*ver+3*hor)%9//3*3+a+b*9 for b in range(3) for a in range(3)] for hor in range(3) for ver in range(3)]
+		box_ids = [[(27*ver+3*hor)//27*27+(27*ver+3*hor) % 9//3*3+a+b*9 for b in range(3) for a in range(3)] for hor in range(3) for ver in range(3)]
 
 		while 0 in grid:
 			options_ref = deepcopy(options)
 
-			# infering in every box
+			# inferring in every box
 			for box in box_ids:
 				self.infer_in_box(options, box_ids, box)
 
 			for field in options.keys():
 				if not len(options[field]):
-					print('bledne rozwiazanie, brak opcji dla pola', field)
+					print('Incorrect solution. Lacking further options for the field.', field)
 					print(options)
 					for x in range(9):
 						buffer = ''
@@ -662,7 +755,7 @@ class Sudoku:
 
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
-	
+
 	sudoku = Sudoku()
 	sudoku.generate_grid()
 	sudoku.prepare_grid()
